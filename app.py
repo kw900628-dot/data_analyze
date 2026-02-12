@@ -8,17 +8,16 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="데이터 만능 분석기", layout="wide")
 
 # ---------------------------------------------------------
-# [수정된 함수] ExcelFile 객체 대신 '데이터(Dict)'를 반환하도록 변경
+# [데이터 로드 함수] 캐싱 적용 & 엑셀/CSV 완벽 지원
 # ---------------------------------------------------------
 @st.cache_data
 def load_data(file):
     try:
-        # [CASE A] 엑셀 파일일 경우
+        # [CASE A] 엑셀 파일일 경우: 모든 시트를 딕셔너리로 읽기
         if file.name.endswith('.xlsx') or file.name.endswith('.xls'):
-            # sheet_name=None 옵션은 모든 시트를 {'시트명': DF} 형태의 딕셔너리로 읽어옵니다.
             return pd.read_excel(file, sheet_name=None)
         
-        # [CASE B] CSV 파일일 경우
+        # [CASE B] CSV 파일일 경우: 인코딩 자동 처리
         elif file.name.endswith('.csv'):
             try:
                 return pd.read_csv(file, encoding='utf-8')
@@ -45,12 +44,9 @@ if uploaded_file is not None:
     if loaded_data is not None:
         df = None
         
-        # [로직] 로드된 데이터가 '딕셔너리(엑셀)'인지 '데이터프레임(CSV)'인지 확인
-        
-        # 1. 엑셀 (딕셔너리 형태)인 경우
+        # 1. 엑셀 (딕셔너리 형태) 처리
         if isinstance(loaded_data, dict):
             sheet_names = list(loaded_data.keys())
-            
             if len(sheet_names) > 1:
                 st.info(f"💡 이 파일에는 {len(sheet_names)}개의 시트가 있습니다.")
                 selected_sheet = st.selectbox("분석할 시트를 선택하세요:", sheet_names)
@@ -58,16 +54,17 @@ if uploaded_file is not None:
             else:
                 df = list(loaded_data.values())[0]
         
-        # 2. CSV (데이터프레임 형태)인 경우
+        # 2. CSV (데이터프레임 형태) 처리
         else:
             df = loaded_data
 
         # ---------------------------------------------------------
-        # 데이터 분석 시작
+        # 데이터 분석 탭 구성 (여기서부터 들여쓰기 주의!)
         # ---------------------------------------------------------
         if df is not None:
-            st.success("파일 업로드 성공!")
+            st.success("✅ 파일 업로드 및 데이터 로드 성공!")
             
+            # 탭 3개 생성
             tab1, tab2, tab3 = st.tabs(["📄 데이터 미리보기", "🎨 내 마음대로 시각화", "🤖 AI 종합 리포트"])
 
             # [Tab 1] 데이터 미리보기
@@ -75,49 +72,48 @@ if uploaded_file is not None:
                 st.write(f"총 {df.shape[0]}행, {df.shape[1]}열의 데이터입니다.")
                 st.dataframe(df.head())
 
-            # [Tab 2] 시각화 (수정된 부분: 그래프 선택 기능 추가)
+            # [Tab 2] 시각화 (X축 문자열 허용, 다양한 차트)
             with tab2:
                 st.subheader("📊 데이터 시각화")
                 
-                # 수치형 컬럼 찾기
-                numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+                all_cols = df.columns.tolist()  # 전체 컬럼 (X축용)
+                numeric_cols = df.select_dtypes(include=['number']).columns.tolist() # 숫자 컬럼 (Y축용)
                 
                 if numeric_cols:
-                    # 1. 그래프 유형 선택 (라디오 버튼)
+                    # 1. 그래프 유형 선택
                     chart_type = st.radio(
                         "그래프 유형을 선택하세요:",
-                        ["산점도 (Scatter Plot)", "선 그래프 (Line Chart)"],
+                        ["산점도 (Scatter Plot)", "선 그래프 (Line Chart)", "막대 그래프 (Bar Chart)"],
                         horizontal=True
                     )
 
-                    # 2. X축, Y축 선택
+                    # 2. X, Y축 선택
                     col1, col2 = st.columns(2)
                     with col1:
-                        x_col = st.selectbox("X축 선택 (가로)", numeric_cols)
+                        x_col = st.selectbox("X축 선택 (모든 데이터 가능)", all_cols)
                     with col2:
-                        y_col = st.selectbox("Y축 선택 (세로)", numeric_cols, index=1 if len(numeric_cols) > 1 else 0)
+                        y_col = st.selectbox("Y축 선택 (숫자 데이터만)", numeric_cols)
                     
-                    # 3. 그래프 그리기 로직
+                    # 3. 그래프 그리기
                     if chart_type == "산점도 (Scatter Plot)":
-                        st.info("💡 산점도는 두 변수 간의 '상관관계'나 '분포'를 볼 때 좋습니다.")
-                        fig = px.scatter(df, x=x_col, y=y_col, title=f"{x_col} vs {y_col} (산점도)")
+                        fig = px.scatter(df, x=x_col, y=y_col, title=f"{x_col} vs {y_col}")
                     
-                    else: # 선 그래프
-                        st.info("💡 선 그래프는 데이터의 '흐름'이나 '추세'를 볼 때 좋습니다.")
-                        # 선 그래프는 순서가 중요하므로 정렬 옵션 제공
-                        sort_opt = st.checkbox("데이터를 X축 기준으로 정렬하기 (추천)", value=True)
-                        
+                    elif chart_type == "선 그래프 (Line Chart)":
+                        sort_opt = st.checkbox("X축 기준 정렬하기 (시간순/순서대로 볼 때 추천)", value=True)
                         plot_df = df.sort_values(by=x_col) if sort_opt else df
-                        fig = px.line(plot_df, x=x_col, y=y_col, title=f"{x_col} vs {y_col} (선 그래프)")
+                        fig = px.line(plot_df, x=x_col, y=y_col, title=f"{x_col}에 따른 {y_col} 변화")
 
-                    # 그래프 출력
+                    elif chart_type == "막대 그래프 (Bar Chart)":
+                        fig = px.bar(df, x=x_col, y=y_col, title=f"{x_col}별 {y_col}")
+
                     st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.warning("수치형 데이터가 없어 그래프를 그릴 수 없습니다.")
+                    st.warning("데이터에 수치형 컬럼이 없어서 그래프를 그릴 수 없습니다.")
 
-            #with tab3:
+            # [Tab 3] AI 리포트 (이제 Tab 2 밖으로 나왔습니다!)
+            with tab3:
                 st.write("### 🤖 AI 종합 분석 리포트")
-                st.info("이 리포트는 데이터의 통계적 특성을 영어로 보여줍니다. 주요 항목은 아래와 같습니다.")
+                st.info("데이터의 통계적 특성, 결측치, 상관관계 등을 한 번에 분석합니다.")
                 
                 # 리포트 보는 법 가이드 (한국어 설명 추가)
                 with st.expander("💡 리포트 보는 법 (용어 설명)"):
@@ -128,12 +124,12 @@ if uploaded_file is not None:
                     * **Missing (결측치):** 데이터가 비어있는 부분이 어디인지 시각화합니다.
                     * **Correlations (상관관계):** 변수들끼리 얼마나 밀접한 관계가 있는지 보여줍니다.
                     """)
-
+                    
                 if st.button("종합 분석 리포트 생성하기"):
-                    with st.spinner("리포트를 생성 중입니다..."):
-                        # title을 한글로 설정
-                        pr = ProfileReport(df, minimal=True, title="나의 데이터 분석 보고서")
+                    with st.spinner("리포트를 생성 중입니다... 잠시만 기다려주세요."):
+                        pr = ProfileReport(df, minimal=True, title="데이터 분석 보고서")
                         report_html = pr.to_html()
                         components.html(report_html, height=800, scrolling=True)
+
     else:
-        st.error("파일을 읽을 수 없습니다. 형식을 확인해주세요.")
+        st.error("파일 형식을 확인해주세요.")
