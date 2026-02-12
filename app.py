@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from ydata_profiling import ProfileReport
-from streamlit_pandas_profiling import st_profile_report
+import streamlit.components.v1 as components
 
 # 페이지 설정
 st.set_page_config(page_title="데이터 만능 분석기", layout="wide")
