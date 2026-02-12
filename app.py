@@ -12,26 +12,47 @@ st.title("📊 데이터 자동 분석 및 종합 리포트")
 uploaded_file = st.file_uploader("데이터 파일 업로드 (csv, xlsx)", type=['csv', 'xlsx'])
 
 if uploaded_file is not None:
-    @st.cache_data
-    def load_data(file):
-        try:
-            # 엑셀 파일인 경우
-            if file.name.endswith('.xlsx') or file.name.endswith('.xls'):
-                return pd.read_excel(file)
+    # 1. 파일 확장자 확인 및 데이터 로드 방식 결정
+    try:
+        df = None
+        
+        # [CASE A] 엑셀 파일일 경우: 시트 선택 기능 추가
+        if uploaded_file.name.endswith('.xlsx') or uploaded_file.name.endswith('.xls'):
+            # 엑셀 파일 자체를 로드 (데이터는 아직 안 읽음)
+            xl_file = pd.ExcelFile(uploaded_file)
+            sheet_names = xl_file.sheet_names
             
-            # CSV 파일인 경우 (인코딩 문제 해결)
-            elif file.name.endswith('.csv'):
-                try:
-                    # 1순위: UTF-8로 시도 (표준)
-                    return pd.read_csv(file, encoding='utf-8')
-                except UnicodeDecodeError:
-                    # 2순위: CP949로 시도 (한글 엑셀 저장 포맷)
-                    return pd.read_csv(file, encoding='cp949')
+            # 시트가 여러 개라면 선택박스 표시
+            if len(sheet_names) > 1:
+                st.info(f"💡 이 엑셀 파일에는 {len(sheet_names)}개의 시트가 있습니다.")
+                selected_sheet = st.selectbox("분석할 시트를 선택하세요:", sheet_names)
+                # 선택한 시트만 데이터프레임으로 변환
+                df = xl_file.parse(selected_sheet)
             else:
-                return None
-        except Exception as e:
-            st.error(f"파일을 읽는 도중 오류가 발생했습니다: {e}")
-            return None
+                # 시트가 1개뿐이면 바로 로드
+                df = xl_file.parse(sheet_names[0])
+
+        # [CASE B] CSV 파일일 경우: 인코딩 자동 처리
+        elif uploaded_file.name.endswith('.csv'):
+            try:
+                df = pd.read_csv(uploaded_file, encoding='utf-8')
+            except UnicodeDecodeError:
+                uploaded_file.seek(0) # 커서 초기화
+                df = pd.read_csv(uploaded_file, encoding='cp949')
+
+        else:
+            st.error("지원하지 않는 파일 형식입니다.")
+
+        # 2. 데이터가 정상적으로 로드되었다면 분석 시작
+        if df is not None:
+            st.success(f"✅ 데이터 로드 성공! ({df.shape[0]}행, {df.shape[1]}열)")
+            
+            # ... (이후 탭(Tab) 생성 및 시각화 코드는 기존과 동일하게 유지) ...
+            
+            # 여기에 아까 작성한 tab1, tab2, tab3 코드가 이어지면 됩니다.
+
+    except Exception as e:
+        st.error(f"파일을 읽는 도중 오류가 발생했습니다: {e}")
 
     df = load_data(uploaded_file)
 
