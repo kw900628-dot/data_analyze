@@ -15,11 +15,22 @@ if uploaded_file is not None:
     @st.cache_data
     def load_data(file):
         try:
-            if file.name.endswith('.csv'):
-                return pd.read_csv(file)
-            else:
+            # 엑셀 파일인 경우
+            if file.name.endswith('.xlsx') or file.name.endswith('.xls'):
                 return pd.read_excel(file)
-        except:
+            
+            # CSV 파일인 경우 (인코딩 문제 해결)
+            elif file.name.endswith('.csv'):
+                try:
+                    # 1순위: UTF-8로 시도 (표준)
+                    return pd.read_csv(file, encoding='utf-8')
+                except UnicodeDecodeError:
+                    # 2순위: CP949로 시도 (한글 엑셀 저장 포맷)
+                    return pd.read_csv(file, encoding='cp949')
+            else:
+                return None
+        except Exception as e:
+            st.error(f"파일을 읽는 도중 오류가 발생했습니다: {e}")
             return None
 
     df = load_data(uploaded_file)
