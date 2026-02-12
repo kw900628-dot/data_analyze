@@ -4,3 +4,5 @@ plotly
 openpyxl
 ydata-profiling==4.6.0
 setuptools
+matplotlib
+numpy
